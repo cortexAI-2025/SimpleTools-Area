@@ -215,7 +215,7 @@ class MapMeasureViewModel(
         if (locationJob?.isActive == true || !locationSource.hasPermission()) return
         var first = _userLocation.value == null && _points.value.isEmpty()
         locationJob = viewModelScope.launch {
-            locationSource.events().catch { }.collect { e ->
+            locationSource.events(includeNetwork = true).catch { }.collect { e ->
                 if (e is LocationEvent.Fix && e.fix.point.isValid) {
                     _userLocation.value = e.fix.point
                     if (first) { first = false; _camera.value = CameraRequest(++cameraId, target = e.fix.point, zoom = 17.0) }

@@ -22,7 +22,8 @@ sealed interface LocationEvent {
 interface LocationSource {
     fun hasPermission(): Boolean
     fun isGpsEnabled(): Boolean
-    fun events(): Flow<LocationEvent>
+    /** [includeNetwork] : ajoute la localisation réseau (rapide mais moins précise) — pour le point bleu de la carte uniquement. */
+    fun events(includeNetwork: Boolean = false): Flow<LocationEvent>
 }
 
 /** Source basée sur LocationManager (fonctionne hors connexion, sans services tiers). */
@@ -35,7 +36,7 @@ class AndroidLocationSource(private val context: Context) : LocationSource {
     override fun isGpsEnabled() = runCatching { manager.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
 
     @SuppressLint("MissingPermission")
-    override fun events(): Flow<LocationEvent> = callbackFlow {
+    override fun events(includeNetwork: Boolean): Flow<LocationEvent> = callbackFlow {
         if (!hasPermission()) {
             close(SecurityException("Permission de localisation absente"))
             return@callbackFlow
@@ -51,6 +52,9 @@ class AndroidLocationSource(private val context: Context) : LocationSource {
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         }
         manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper())
+        if (includeNetwork && runCatching { manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)) {
+            runCatching { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 0f, listener, Looper.getMainLooper()) }
+        }
         awaitClose { manager.removeUpdates(listener) }
     }
 }

@@ -51,7 +51,7 @@ private class FakeSettings : SettingsStore {
 private class DeniedLocation : LocationSource {
     override fun hasPermission() = false
     override fun isGpsEnabled() = false
-    override fun events(): Flow<LocationEvent> = emptyFlow()
+    override fun events(includeNetwork: Boolean): Flow<LocationEvent> = emptyFlow()
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
