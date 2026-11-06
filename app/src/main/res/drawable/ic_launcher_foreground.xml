@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- polygone de parcelle -->
+    <path android:fillColor="#66FFFFFF" android:strokeColor="#FFFFFF" android:strokeWidth="3"
+        android:pathData="M30,40 L62,30 L80,52 L68,78 L36,72 Z" />
+    <!-- sommets -->
+    <path android:fillColor="#FFFFFF" android:pathData="M30,40m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M62,30m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M80,52m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M68,78m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M36,72m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+</vector>
