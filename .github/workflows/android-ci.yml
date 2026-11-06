@@ -1,0 +1,74 @@
+name: Android CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile, lint, unit tests and debug APK
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace \
+            :app:compileDebugKotlin :app:lintDebug :app:testDebugUnitTest :app:assembleDebug \
+            2>&1 | tee build.log
+
+      - name: Test summary
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, re
+          tot = fail = skip = 0
+          for f in glob.glob('app/build/test-results/testDebugUnitTest/*.xml'):
+              m = re.search(r'tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"', open(f).read())
+              if m:
+                  tot += int(m[1]); skip += int(m[2]); fail += int(m[3]) + int(m[4])
+          print(f"### Tests unitaires\n\n{tot} exécutés · {fail} échecs · {skip} ignorés")
+          PY
+
+      - name: Name the APK with version and commit
+        run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/SimpleTools-Area-${VERSION}-${GITHUB_SHA::7}-debug.apk"
+          sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimpleTools-Area-debug-apk
+          path: dist/
+          if-no-files-found: error
+
+      - name: Upload build logs and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-and-reports
+          path: |
+            build.log
+            app/build/reports/tests/
+            app/build/test-results/
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
