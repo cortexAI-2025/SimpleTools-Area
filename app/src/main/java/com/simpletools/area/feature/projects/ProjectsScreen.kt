@@ -3,6 +3,8 @@ package com.simpletools.area.feature.projects
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -71,7 +73,9 @@ internal fun ProjectsScreen(store: ProjectStore, repo: ParcelRepository, active:
     var compare by remember(selectedId) { mutableStateOf(setOf<Int>()) }
     var busy by remember { mutableStateOf(false) }
     var coefficient by rememberSaveable(selectedId) { mutableStateOf("") }
-    var parts by rememberSaveable(selectedId) { mutableStateOf("") }
+    var dividing by remember { mutableStateOf<ProjectParcel?>(null) }
+    var parts by remember { mutableStateOf("") }
+    var division by remember { mutableStateOf<ParcelDivision?>(null) }
 
     fun action(block: suspend () -> Unit) {
         if (busy) return
@@ -162,6 +166,11 @@ internal fun ProjectsScreen(store: ProjectStore, repo: ParcelRepository, active:
                         Text("${formatArea(parcel.netAreaM2)} · ${formatLength(parcel.perimeterM)}")
                         if (parcel.exclusions.isNotEmpty()) Text(stringResource(R.string.area_exclusion_count, parcel.exclusions.size))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            AssistChip(onClick = {
+                                parts = ""
+                                division = null
+                                dividing = parcel
+                            }, label = { Text(stringResource(R.string.area_divide)) })
                             AssistChip(onClick = { editing = index }, label = { Text(stringResource(R.string.area_edit)) })
                             AssistChip(onClick = {
                                 picker = { source ->
@@ -197,10 +206,6 @@ internal fun ProjectsScreen(store: ProjectStore, repo: ParcelRepository, active:
                     coefficient.replace(',', '.').toDoubleOrNull()?.takeIf { it >= 0 && (it * project.areaM2).isFinite() }?.let {
                         val amount = java.text.NumberFormat.getNumberInstance(locale).format(it * project.areaM2)
                         Text(stringResource(R.string.area_quantity, amount))
-                    }
-                    OutlinedTextField(parts, { parts = it }, label = { Text(stringResource(R.string.area_division_count)) }, singleLine = true)
-                    parts.toIntOrNull()?.takeIf { it >= 2 }?.let {
-                        Text(stringResource(R.string.area_division_result, formatArea(project.areaM2 / it)))
                     }
                     DisclaimerText()
                 }
@@ -243,6 +248,34 @@ internal fun ProjectsScreen(store: ProjectStore, repo: ParcelRepository, active:
                 }
             },
             confirmButton = { TextButton(onClick = { picker = null }) { Text(stringResource(R.string.close)) } },
+        )
+    }
+    dividing?.takeIf { active }?.let { parcel ->
+        val count = parts.toIntOrNull()?.takeIf { it in 2..20 }
+        AlertDialog(
+            onDismissRequest = { if (!busy) dividing = null },
+            title = { Text(stringResource(R.string.area_divide)) },
+            text = {
+                Column(Modifier.padding(4.dp).verticalScroll(rememberScrollState())) {
+                    Text(parcel.name)
+                    OutlinedTextField(parts, { parts = it.take(2); division = null },
+                        label = { Text(stringResource(R.string.area_division_count)) }, singleLine = true, enabled = !busy)
+                    division?.let { result ->
+                        Text(stringResource(R.string.area_division_result, formatArea(result.targetAreaM2)))
+                        Text(stringResource(R.string.area_division_meridians))
+                        val number = java.text.NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 7 }
+                        result.cutLongitudes.forEach { Text("${number.format(it)}°") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = count != null && !busy, onClick = {
+                    if (count != null) action {
+                        division = withContext(Dispatchers.Default) { parcel.divide(count) }
+                    }
+                }) { Text(stringResource(R.string.area_division_calculate)) }
+            },
+            dismissButton = { TextButton(onClick = { dividing = null }, enabled = !busy) { Text(stringResource(R.string.close)) } },
         )
     }
     editing?.takeIf { active }?.let { index ->

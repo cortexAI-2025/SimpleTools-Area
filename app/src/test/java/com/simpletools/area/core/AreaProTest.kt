@@ -8,6 +8,7 @@ import com.simpletools.area.core.geometry.PolygonResult
 import com.simpletools.area.core.location.GpsFix
 import com.simpletools.area.core.location.GpsRecorder
 import com.simpletools.area.feature.projects.AreaProject
+import com.simpletools.area.feature.projects.divide
 import com.simpletools.area.feature.projects.projectKml
 import com.simpletools.area.feature.projects.projectParcel
 import org.junit.Assert.assertEquals
@@ -36,6 +37,15 @@ class AreaProTest {
         val kml = projectKml(project)
         assertTrue(kml.contains("<innerBoundaryIs>"))
         assertTrue(kml.contains("A &amp; B"))
+    }
+
+    @Test fun divisionReturnsTwoEqualBandsAcrossAntimeridian() {
+        val outer = listOf(GeoPoint(10.0, 179.99), GeoPoint(10.0, -179.99),
+            GeoPoint(10.01, -179.99), GeoPoint(10.01, 179.99))
+        val parcel = projectParcel("Area", "", outer, emptyList())
+        val division = parcel.divide(2)
+        assertEquals(parcel.netAreaM2 / 2, division.targetAreaM2, 1e-6)
+        assertEquals(180.0, kotlin.math.abs(division.cutLongitudes.single()), 1e-7)
     }
 
     @Test fun invalidExclusionsAreRejected() {

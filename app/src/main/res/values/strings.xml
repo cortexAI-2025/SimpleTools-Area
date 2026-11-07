@@ -200,4 +200,7 @@
     <string name="area_division_count">Nombre de parts égales</string>
     <string name="area_division_result">Surface indicative par part · %1$s</string>
     <string name="area_share_text">Partager le résultat</string>
+    <string name="area_divide">Diviser la parcelle</string>
+    <string name="area_division_calculate">Calculer</string>
+    <string name="area_division_meridians">Longitudes des coupes nord–sud</string>
 </resources>
