@@ -82,7 +82,7 @@ class ParcelDetailViewModel(private val id: Long, private val repo: ParcelReposi
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ParcelDetailScreen(vm: ParcelDetailViewModel, onBack: () -> Unit, onEditGeometry: (Long, Boolean) -> Unit, onOpen: (Long) -> Unit) {
+fun ParcelDetailScreen(vm: ParcelDetailViewModel, onBack: () -> Unit, onEditGeometry: (Long, Boolean) -> Unit, onOpen: (Long) -> Unit, hasPro: () -> Boolean = { false }, onPro: () -> Unit = {}) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0]
     val p by vm.parcel.collectAsState()
@@ -138,6 +138,18 @@ fun ParcelDetailScreen(vm: ParcelDetailViewModel, onBack: () -> Unit, onEditGeom
                         }
                     }
                 }
+                AssistChip(onClick = {
+                    val result = buildString {
+                        appendLine(parcel.name)
+                        if (!isDistance) appendLine(UnitFormat.formatArea(parcel.areaM2, choice, locale))
+                        append(UnitFormat.formatLength(parcel.perimeterM, UnitFormat.autoLengthUnit(parcel.perimeterM), locale))
+                    }
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, result)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(intent, context.getString(R.string.share)))
+                }, label = { Text(stringResource(R.string.area_share_text)) })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     AssistChip(onClick = { showRename = true }, label = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Filled.Edit, null, Modifier.size(18.dp)) })
                     AssistChip(onClick = { onEditGeometry(parcel.id, isDistance) }, label = { Text(stringResource(R.string.edit_geometry)) }, leadingIcon = { Icon(Icons.Filled.EditLocationAlt, null, Modifier.size(18.dp)) })
@@ -147,13 +159,20 @@ fun ParcelDetailScreen(vm: ParcelDetailViewModel, onBack: () -> Unit, onEditGeom
                     Box {
                         AssistChip(onClick = { showExport = true }, label = { Text(stringResource(R.string.export)) }, leadingIcon = { Icon(Icons.Filled.Share, null, Modifier.size(18.dp)) })
                         DropdownMenu(expanded = showExport, onDismissRequest = { showExport = false }) {
-                            ExportFormat.entries.forEach { f ->
-                                DropdownMenuItem(text = { Text(f.name) }, onClick = {
+                            ExportFormat.entries.filter { it != ExportFormat.GPX || isDistance }.forEach { f ->
+                                DropdownMenuItem(text = { Text(if (f.pro) "${f.name} · PRO" else f.name) }, onClick = {
                                     showExport = false
-                                    scope.launch {
-                                        runCatching { withContext(Dispatchers.IO) { ShareHelper.export(context, parcel, f, locale) } }
-                                            .onSuccess { ShareHelper.share(context, parcel, f, locale) }
-                                            .onFailure { snackbar.showSnackbar(context.getString(R.string.export_failed)) }
+                                    if (f.pro && !hasPro()) onPro()
+                                    else scope.launch {
+                                        try {
+                                            val file = withContext(Dispatchers.IO) { ShareHelper.export(context, parcel, f, locale) }
+                                            if (f.pro && !hasPro()) onPro()
+                                            else ShareHelper.shareFile(context, file, f.mime, parcel.name)
+                                        } catch (failure: java.io.IOException) {
+                                            snackbar.showSnackbar(context.getString(R.string.export_failed))
+                                        } catch (failure: IllegalArgumentException) {
+                                            snackbar.showSnackbar(context.getString(R.string.export_failed))
+                                        }
                                     }
                                 })
                             }

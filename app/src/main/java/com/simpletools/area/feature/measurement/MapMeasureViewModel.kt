@@ -21,13 +21,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class MeasureMode { AREA, DISTANCE }
+enum class MeasureMode { AREA, DISTANCE, PERIMETER }
 
 sealed interface Metrics {
     data object Empty : Metrics
@@ -47,9 +48,13 @@ class MapMeasureViewModel(
     private val repo: ParcelRepository,
     settingsStore: SettingsStore,
     private val locationSource: LocationSource,
-    val mode: MeasureMode,
+    initialMode: MeasureMode,
     private val editParcelId: Long?,
 ) : ViewModel() {
+
+    private val _mode = MutableStateFlow(saved.get<String>("mode")?.let(MeasureMode::valueOf) ?: initialMode)
+    val mode = _mode.asStateFlow()
+    fun setMode(mode: MeasureMode) { _mode.value = mode; saved["mode"] = mode.name }
 
     private val _points = MutableStateFlow(Converters.decodePoints(saved.get<String>(KEY_POINTS) ?: ""))
     val points: StateFlow<List<GeoPoint>> = _points
@@ -89,8 +94,8 @@ class MapMeasureViewModel(
     val areaUnit: StateFlow<AreaUnitChoice> = combine(_unit, settings) { u, s -> u ?: s.areaUnit }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AreaUnitChoice.AUTO)
 
-    val metrics: StateFlow<Metrics> = combine(_points) { arr -> compute(arr[0]) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, compute(_points.value))
+    val metrics: StateFlow<Metrics> = combine(_points, _mode, ::compute)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, compute(_points.value, _mode.value))
 
     init {
         if (editParcelId != null && _points.value.isEmpty() && saved.get<Boolean>(KEY_LOADED) != true) {
@@ -105,7 +110,7 @@ class MapMeasureViewModel(
         }
     }
 
-    private fun compute(pts: List<GeoPoint>): Metrics = when {
+    private fun compute(pts: List<GeoPoint>, mode: MeasureMode): Metrics = when {
         pts.isEmpty() -> Metrics.Empty
         mode == MeasureMode.DISTANCE -> Metrics.Length(GeoMath.pathLengthM(pts))
         pts.size < 3 -> Metrics.Incomplete(pts.size)
@@ -237,8 +242,8 @@ class MapMeasureViewModel(
     suspend fun save(name: String, notes: String): Long? {
         val unit = areaUnit.value.name
         val pts = _points.value
-        return when (mode) {
-            MeasureMode.AREA -> {
+        return when (_mode.value) {
+            MeasureMode.AREA, MeasureMode.PERIMETER -> {
                 val r = GeoMath.validatePolygon(pts) as? PolygonResult.Valid ?: return null
                 persistParcel(name, notes, MeasureType.MAP, r.points, r.areaM2, r.perimeterM, unit)
             }
@@ -254,7 +259,7 @@ class MapMeasureViewModel(
     ): Long {
         val existing = existingParcel()
         return if (existing != null) {
-            repo.update(existing.copy(name = name, notes = notes, points = pts, areaM2 = area, perimeterM = per, displayUnit = unit))
+            repo.update(existing.copy(name = name, notes = notes, type = if (type == MeasureType.DISTANCE) type else existing.type.takeUnless { it == MeasureType.DISTANCE } ?: type, points = pts, areaM2 = area, perimeterM = per, displayUnit = unit))
             existing.id
         } else {
             repo.save(ParcelEntity(name = name, createdAt = 0, updatedAt = 0, type = type, points = pts, areaM2 = area, perimeterM = per, displayUnit = unit, notes = notes))

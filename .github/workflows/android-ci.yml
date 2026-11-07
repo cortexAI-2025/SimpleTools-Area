@@ -27,24 +27,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Compile, lint, unit tests and debug APK
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Compile, lint, unit tests, debug APK and unsigned release bundle
         run: |
           set -o pipefail
           ./gradlew --no-daemon --stacktrace \
-            :app:compileDebugKotlin :app:lintDebug :app:testDebugUnitTest :app:assembleDebug \
+            :app:compileDebugKotlin :app:lintDebug :app:testDebugUnitTest :app:assembleDebug :app:bundleRelease \
             2>&1 | tee build.log
 
       - name: Test summary
         if: always()
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import glob, re
-          tot = fail = skip = 0
-          for f in glob.glob('app/build/test-results/testDebugUnitTest/*.xml'):
-              m = re.search(r'tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"', open(f).read())
-              if m:
-                  tot += int(m[1]); skip += int(m[2]); fail += int(m[3]) + int(m[4])
-          print(f"### Tests unitaires\n\n{tot} exécutés · {fail} échecs · {skip} ignorés")
+          import glob
+          import xml.etree.ElementTree as ET
+          total = failed = skipped = 0
+          for file in glob.glob('app/build/test-results/testDebugUnitTest/*.xml'):
+              suite = ET.parse(file).getroot()
+              total += int(suite.attrib['tests'])
+              failed += int(suite.attrib['failures']) + int(suite.attrib['errors'])
+              skipped += int(suite.attrib['skipped'])
+          print(f"### Tests unitaires\n\n{total - skipped} exécutés · {failed} échecs · {skipped} ignorés")
           PY
 
       - name: Name the APK with version and commit
@@ -59,6 +64,13 @@ jobs:
         with:
           name: SimpleTools-Area-debug-apk
           path: dist/
+          if-no-files-found: error
+
+      - name: Upload unsigned release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimpleTools-Area-release-aab-unsigned
+          path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
       - name: Upload build logs and reports

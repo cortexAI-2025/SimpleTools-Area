@@ -46,6 +46,7 @@ fun HomeScreen(
     onDistance: () -> Unit,
     onLibrary: () -> Unit,
     onSettings: () -> Unit,
+    onPro: (() -> Unit)? = null,
 ) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(
@@ -75,6 +76,7 @@ fun HomeScreen(
             HomeTile(Icons.Filled.Calculate, R.string.home_calc, R.string.home_calc_desc, onCalculator)
             HomeTile(Icons.Filled.Straighten, R.string.home_distance, R.string.home_distance_desc, onDistance)
             HomeTile(Icons.Filled.Folder, R.string.home_library, R.string.home_library_desc, onLibrary)
+            onPro?.let { HomeTile(Icons.Filled.Folder, R.string.area_pro, R.string.area_pro_home, it) }
             DisclaimerText(Modifier.padding(top = 4.dp))
         }
     }

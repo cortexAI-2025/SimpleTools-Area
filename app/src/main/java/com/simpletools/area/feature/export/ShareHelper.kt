@@ -9,10 +9,12 @@ import com.simpletools.area.core.database.ParcelEntity
 import java.io.File
 import java.util.Locale
 
-enum class ExportFormat(val extension: String, val mime: String) {
+enum class ExportFormat(val extension: String, val mime: String, val pro: Boolean = false) {
     PDF("pdf", "application/pdf"),
     CSV("csv", "text/csv"),
     GEOJSON("geojson", "application/geo+json"),
+    KML("kml", "application/vnd.google-earth.kml+xml", pro = true),
+    GPX("gpx", "application/gpx+xml", pro = true),
 }
 
 /** Écrit l'export dans le cache puis lance le partage Android natif (FileProvider, aucun accès stockage large). */
@@ -44,22 +46,27 @@ object ShareHelper {
     fun export(context: Context, parcel: ParcelEntity, format: ExportFormat, locale: Locale): File {
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }
         val safe = parcel.name.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifEmpty { "parcelle" }
-        val file = File(dir, "$safe.${format.extension}")
+        val file = File.createTempFile("${safe.take(60).padEnd(3, '_')}-", ".${format.extension}", dir)
         when (format) {
             ExportFormat.PDF -> file.outputStream().use { PdfReport.write(parcel, labels(context, parcel), locale, it) }
             ExportFormat.CSV -> file.writeText(Exporters.toCsv(parcel), Charsets.UTF_8)
             ExportFormat.GEOJSON -> file.writeText(Exporters.toGeoJson(parcel), Charsets.UTF_8)
+            ExportFormat.KML -> file.writeText(Exporters.toKml(parcel), Charsets.UTF_8)
+            ExportFormat.GPX -> file.writeText(Exporters.toGpx(parcel), Charsets.UTF_8)
         }
         return file
     }
 
     fun share(context: Context, parcel: ParcelEntity, format: ExportFormat, locale: Locale) {
-        val file = export(context, parcel, format, locale)
+        shareFile(context, export(context, parcel, format, locale), format.mime, parcel.name)
+    }
+
+    fun shareFile(context: Context, file: File, mime: String, subject: String) {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = format.mime
+            type = mime
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, parcel.name)
+            putExtra(Intent.EXTRA_SUBJECT, subject)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(send, context.getString(R.string.share)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

@@ -26,6 +26,7 @@ data class RecorderState(
     val lastReject: RejectReason? = null,
     val providerEnabled: Boolean = true,
     val lastError: GpsErrorHint? = null,
+    val openTrack: Boolean = false,
 )
 
 enum class GpsErrorHint { SELF_INTERSECTING }
@@ -44,14 +45,14 @@ class GpsRecorder(initialFilter: TrackFilter = TrackFilter()) {
         this.filter = filter
     }
 
-    fun start(permissionGranted: Boolean, providerEnabled: Boolean): StartResult {
+    fun start(permissionGranted: Boolean, providerEnabled: Boolean, openTrack: Boolean = false): StartResult {
         if (!permissionGranted) return StartResult.PERMISSION_DENIED
         if (!providerEnabled) {
             _state.update { it.copy(providerEnabled = false) }
             return StartResult.GPS_DISABLED
         }
         lastAcceptedTime = null
-        _state.value = RecorderState(status = RecorderStatus.RECORDING, providerEnabled = true)
+        _state.value = RecorderState(status = RecorderStatus.RECORDING, providerEnabled = true, openTrack = openTrack)
         return StartResult.STARTED
     }
 
@@ -83,7 +84,7 @@ class GpsRecorder(initialFilter: TrackFilter = TrackFilter()) {
 
     private fun withGeometry(s: RecorderState): RecorderState {
         val dist = GeoMath.pathLengthM(s.points)
-        if (s.points.size < 3) return s.copy(distanceM = dist, areaM2 = null, perimeterM = null, lastError = null)
+        if (s.openTrack || s.points.size < 3) return s.copy(distanceM = dist, areaM2 = null, perimeterM = null, lastError = null)
         return when (val r = GeoMath.validatePolygon(s.points)) {
             is PolygonResult.Valid -> s.copy(distanceM = dist, areaM2 = r.areaM2, perimeterM = r.perimeterM, lastError = null)
             is PolygonResult.Invalid -> s.copy(
@@ -98,6 +99,10 @@ class GpsRecorder(initialFilter: TrackFilter = TrackFilter()) {
         val s = _state.value
         if (s.status != RecorderStatus.RECORDING && s.status != RecorderStatus.PAUSED) return null
         _state.update { it.copy(status = RecorderStatus.FINISHED) }
+        if (s.openTrack) {
+            return if (s.points.size >= 2) PolygonResult.Valid(s.points, 0.0, s.distanceM, 0)
+            else PolygonResult.Invalid(com.simpletools.area.core.geometry.PolygonError.TOO_FEW_POINTS)
+        }
         return GeoMath.validatePolygon(s.points)
     }
 

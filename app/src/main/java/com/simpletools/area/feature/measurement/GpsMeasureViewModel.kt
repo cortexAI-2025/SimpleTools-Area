@@ -37,6 +37,8 @@ class GpsMeasureViewModel(
     private val locationSource: LocationSource,
     private val startService: () -> Unit,
     private val stopService: () -> Unit,
+    val openTrack: Boolean = false,
+    private val hasPro: () -> Boolean = { false },
 ) : ViewModel() {
 
     val state: StateFlow<RecorderState> = recorder.state
@@ -56,9 +58,10 @@ class GpsMeasureViewModel(
     fun start() {
         viewModelScope.launch {
             val s = settingsStore.settings.first()
+            if (openTrack && !hasPro()) return@launch
             recorder.configure(TrackFilter(maxAccuracyM = s.gpsMaxAccuracyM, minDistanceM = s.gpsMinDistanceM))
             _result.value = null
-            when (recorder.start(locationSource.hasPermission(), locationSource.isGpsEnabled())) {
+            when (recorder.start(locationSource.hasPermission(), locationSource.isGpsEnabled(), openTrack)) {
                 StartResult.STARTED -> { startService(); _event.value = GpsUiEvent.None }
                 StartResult.PERMISSION_DENIED -> _event.value = GpsUiEvent.PermissionDenied
                 StartResult.GPS_DISABLED -> _event.value = GpsUiEvent.GpsDisabled
@@ -83,10 +86,11 @@ class GpsMeasureViewModel(
     }
 
     suspend fun save(name: String, notes: String, unit: AreaUnitChoice): Long? {
+        if (openTrack && !hasPro()) return null
         val r = _result.value ?: return null
         val id = repo.save(
             ParcelEntity(
-                name = name, createdAt = 0, updatedAt = 0, type = MeasureType.GPS, points = r.points,
+                name = name, createdAt = 0, updatedAt = 0, type = if (openTrack) MeasureType.DISTANCE else MeasureType.GPS, points = r.points,
                 areaM2 = r.areaM2, perimeterM = r.perimeterM, displayUnit = unit.name, notes = notes,
             ),
         )

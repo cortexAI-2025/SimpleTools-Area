@@ -2,7 +2,6 @@ package com.simpletools.area.core.geometry
 
 import kotlin.math.abs
 import kotlin.math.asin
-import kotlin.math.atan
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.ln
@@ -10,26 +9,14 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
-import kotlin.math.tan
 
-/**
- * Calculs géodésiques sur l'ellipsoïde WGS84.
- *
- * Méthode (voir docs/GEOMETRY.md) :
- *  - Surface : projection azimutale équivalente de Lambert (formules ellipsoïdales de Snyder,
- *    "Map Projections – A Working Manual", §24), centrée sur le polygone. La projection conserve
- *    exactement les aires : la formule du lacet (shoelace) appliquée aux coordonnées projetées
- *    donne donc la surface sur l'ellipsoïde pour un polygone dont les côtés sont les segments
- *    de la projection (écart avec les géodésiques négligeable pour des parcelles).
- *  - Distance : formule inverse de Vincenty (précision ~0,5 mm), repli Haversine si non convergente.
- *
- * La précision numérique de ces calculs est sans rapport avec la précision réelle d'une mesure GPS
- * (typiquement 3 à 15 m sur un smartphone).
- */
+import net.sf.geographiclib.Geodesic
+import net.sf.geographiclib.PolygonArea
+
+/** Distances et aires géodésiques WGS84. Projection locale réservée au dessin et à la topologie. */
 object GeoMath {
     const val WGS84_A = 6378137.0
     const val WGS84_F = 1.0 / 298.257223563
-    private const val WGS84_B = WGS84_A * (1 - WGS84_F)
     private val E2 = WGS84_F * (2 - WGS84_F)
     private val E = sqrt(E2)
     private const val MIN_SEGMENT_M = 0.001
@@ -38,61 +25,10 @@ object GeoMath {
 
     // ---------------------------------------------------------------- distance
 
-    /** Distance géodésique en mètres entre deux points (Vincenty, repli Haversine). */
+    /** Distance sur la géodésique la plus courte, y compris près des antipodes. */
     fun distance(a: GeoPoint, b: GeoPoint): Double {
-        if (a == b) return 0.0
-        return vincenty(a, b) ?: haversine(a, b)
-    }
-
-    fun haversine(a: GeoPoint, b: GeoPoint): Double {
-        val r = 6371008.8
-        val dLat = rad(b.lat - a.lat)
-        val dLon = rad(b.lon - a.lon)
-        val h = sin(dLat / 2).let { it * it } +
-            cos(rad(a.lat)) * cos(rad(b.lat)) * sin(dLon / 2).let { it * it }
-        return 2 * r * asin(min(1.0, sqrt(h)))
-    }
-
-    private fun vincenty(p1: GeoPoint, p2: GeoPoint): Double? {
-        val l = rad(p2.lon - p1.lon)
-        val u1 = atan((1 - WGS84_F) * tan(rad(p1.lat)))
-        val u2 = atan((1 - WGS84_F) * tan(rad(p2.lat)))
-        val sinU1 = sin(u1); val cosU1 = cos(u1)
-        val sinU2 = sin(u2); val cosU2 = cos(u2)
-        var lambda = l
-        var iter = 0
-        var sinSigma: Double; var cosSigma: Double; var sigma: Double
-        var cosSqAlpha: Double; var cos2SigmaM: Double
-        do {
-            val sinL = sin(lambda); val cosL = cos(lambda)
-            sinSigma = sqrt(
-                (cosU2 * sinL).let { it * it } +
-                    (cosU1 * sinU2 - sinU1 * cosU2 * cosL).let { it * it },
-            )
-            if (sinSigma == 0.0) return 0.0
-            cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosL
-            sigma = atan2(sinSigma, cosSigma)
-            val sinAlpha = cosU1 * cosU2 * sinL / sinSigma
-            cosSqAlpha = 1 - sinAlpha * sinAlpha
-            cos2SigmaM = if (cosSqAlpha != 0.0) cosSigma - 2 * sinU1 * sinU2 / cosSqAlpha else 0.0
-            val c = WGS84_F / 16 * cosSqAlpha * (4 + WGS84_F * (4 - 3 * cosSqAlpha))
-            val prev = lambda
-            lambda = l + (1 - c) * WGS84_F * sinAlpha *
-                (sigma + c * sinSigma * (cos2SigmaM + c * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)))
-            if (abs(lambda - prev) < 1e-12) break
-            iter++
-        } while (iter < 200)
-        if (iter >= 200) return null
-        val uSq = cosSqAlpha * (WGS84_A * WGS84_A - WGS84_B * WGS84_B) / (WGS84_B * WGS84_B)
-        val bigA = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)))
-        val bigB = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)))
-        val deltaSigma = bigB * sinSigma * (
-            cos2SigmaM + bigB / 4 * (
-                cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM) -
-                    bigB / 6 * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)
-                )
-            )
-        return WGS84_B * bigA * (sigma - deltaSigma)
+        require(a.isValid && b.isValid)
+        return Geodesic.WGS84.Inverse(a.lat, a.lon, b.lat, b.lon).s12
     }
 
     // ---------------------------------------------------------------- projection
@@ -144,7 +80,14 @@ object GeoMath {
     /** Aire absolue (m²) d'un polygone déjà validé/nettoyé. */
     fun areaM2(points: List<GeoPoint>): Double {
         if (points.size < 3) return 0.0
-        return abs(shoelace(projectEqualArea(points)))
+        return abs(signedAreaM2(points))
+    }
+
+    fun signedAreaM2(points: List<GeoPoint>): Double {
+        require(points.all { it.isValid })
+        val polygon = PolygonArea(Geodesic.WGS84, false)
+        points.forEach { polygon.AddPoint(it.lat, it.lon) }
+        return polygon.Compute(false, true).area
     }
 
     /** Périmètre (m). Si [closed], inclut le segment dernier → premier. */
@@ -184,7 +127,7 @@ object GeoMath {
         val plane = projectEqualArea(cleaned)
         if (allCollinear(plane)) return PolygonResult.Invalid(PolygonError.ZERO_AREA)
         if (hasSelfIntersection(plane)) return PolygonResult.Invalid(PolygonError.SELF_INTERSECTING)
-        val area = abs(shoelace(plane))
+        val area = areaM2(cleaned)
         if (area < 1e-6) return PolygonResult.Invalid(PolygonError.ZERO_AREA)
         return PolygonResult.Valid(
             points = cleaned,
@@ -228,7 +171,7 @@ object GeoMath {
         p.x >= min(a.x, b.x) - 1e-9 && p.x <= max(a.x, b.x) + 1e-9 &&
             p.y >= min(a.y, b.y) - 1e-9 && p.y <= max(a.y, b.y) + 1e-9
 
-    private fun segmentsIntersect(a: PlanePoint, b: PlanePoint, c: PlanePoint, d: PlanePoint): Boolean {
+    internal fun segmentsIntersect(a: PlanePoint, b: PlanePoint, c: PlanePoint, d: PlanePoint): Boolean {
         val eps = 1e-9
         val d1 = cross(a, b, c); val d2 = cross(a, b, d)
         val d3 = cross(c, d, a); val d4 = cross(c, d, b)

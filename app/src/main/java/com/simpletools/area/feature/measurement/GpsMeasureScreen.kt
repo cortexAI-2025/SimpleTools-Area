@@ -98,12 +98,12 @@ fun GpsMeasureScreen(vm: GpsMeasureViewModel, onBack: () -> Unit, onSaved: (Long
         s.lastFix?.let { camera = CameraRequest(++cameraId, target = it, zoom = 18.0) }
     }
 
-    Scaffold(topBar = { AppTopBar(stringResource(R.string.gps_title), onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = { AppTopBar(stringResource(if (vm.openTrack) R.string.area_gps_track else R.string.gps_title), onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 MeasureMap(
                     modifier = Modifier.fillMaxSize(),
-                    points = s.points, closed = s.status == RecorderStatus.FINISHED, selectedIndex = null, editable = false,
+                    points = s.points, closed = !vm.openTrack && s.status == RecorderStatus.FINISHED, selectedIndex = null, editable = false,
                     userLocation = s.lastFix, dark = isDark(settings.theme), satelliteUrl = null,
                     cameraRequest = camera, initialCenter = s.lastFix ?: com.simpletools.area.core.geometry.GeoPoint(46.6, 2.4),
                     initialZoom = if (s.lastFix != null) 18.0 else 5.0,
@@ -120,7 +120,7 @@ fun GpsMeasureScreen(vm: GpsMeasureViewModel, onBack: () -> Unit, onSaved: (Long
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Stat(stringResource(R.string.distance_walked), UnitFormat.formatLength(s.distanceM, UnitFormat.autoLengthUnit(s.distanceM), locale), Modifier.weight(1f))
                         Stat(stringResource(R.string.points), s.points.size.toString(), Modifier.weight(0.6f))
-                        Stat(
+                        if (!vm.openTrack) Stat(
                             stringResource(R.string.area),
                             s.areaM2?.let { UnitFormat.formatArea(it, AreaUnitChoice.AUTO, locale) } ?: "—",
                             Modifier.weight(1f),
@@ -134,10 +134,10 @@ fun GpsMeasureScreen(vm: GpsMeasureViewModel, onBack: () -> Unit, onSaved: (Long
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    StatusLine(s.status, s.lastReject, s.providerEnabled, s.lastAccuracyM, s.points.size)
+                    StatusLine(s.status, s.lastReject, s.providerEnabled, s.lastAccuracyM, s.points.size, vm.openTrack)
                     if (s.lastError != null) Text(stringResource(R.string.err_self_intersecting), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     Controls(
-                        status = s.status, enoughPoints = s.points.size >= 3,
+                        status = s.status, enoughPoints = s.points.size >= if (vm.openTrack) 2 else 3,
                         onStart = ::requestAndStart, onPause = vm::pause, onResume = vm::resume,
                         onFinish = vm::finish, onDiscard = vm::discard, onSave = { showSave = true },
                         canSave = result != null,
@@ -158,7 +158,7 @@ fun GpsMeasureScreen(vm: GpsMeasureViewModel, onBack: () -> Unit, onSaved: (Long
             stringResource(R.string.open_location_settings), { vm.consumeEvent(); openLocationSettings(context) }, { vm.consumeEvent() },
         )
         is GpsUiEvent.Invalid -> AlertDialogSimple(
-            stringResource(R.string.measure_invalid), polygonErrorText((event as GpsUiEvent.Invalid).error),
+            stringResource(R.string.measure_invalid), if (vm.openTrack) stringResource(R.string.area_gps_track_minimum) else polygonErrorText((event as GpsUiEvent.Invalid).error),
             stringResource(R.string.new_measure), { vm.consumeEvent(); vm.discard() }, { vm.consumeEvent() },
         )
         GpsUiEvent.None -> {}
@@ -214,15 +214,15 @@ private fun AccuracyBadge(acc: Float?, maxOk: Double, modifier: Modifier) {
 }
 
 @Composable
-private fun StatusLine(status: RecorderStatus, reject: RejectReason?, providerOn: Boolean, acc: Float?, n: Int) {
+private fun StatusLine(status: RecorderStatus, reject: RejectReason?, providerOn: Boolean, acc: Float?, n: Int, openTrack: Boolean) {
     val msg = when {
         !providerOn -> stringResource(R.string.gps_signal_lost)
-        status == RecorderStatus.IDLE -> stringResource(R.string.gps_hint_idle)
+        status == RecorderStatus.IDLE -> stringResource(if (openTrack) R.string.area_gps_track_idle else R.string.gps_hint_idle)
         status == RecorderStatus.PAUSED -> stringResource(R.string.gps_paused)
-        status == RecorderStatus.FINISHED -> stringResource(R.string.gps_finished)
+        status == RecorderStatus.FINISHED -> stringResource(if (openTrack) R.string.area_gps_track_finished else R.string.gps_finished)
         reject == RejectReason.POOR_ACCURACY || reject == RejectReason.NO_ACCURACY -> stringResource(R.string.gps_reject_accuracy)
         reject == RejectReason.OUTLIER_JUMP -> stringResource(R.string.gps_reject_jump)
-        n == 0 -> stringResource(R.string.gps_walk_hint)
+        n == 0 -> stringResource(if (openTrack) R.string.area_gps_track_walk else R.string.gps_walk_hint)
         else -> stringResource(R.string.gps_recording)
     }
     Text(msg, style = MaterialTheme.typography.bodySmall, color = if (!providerOn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
