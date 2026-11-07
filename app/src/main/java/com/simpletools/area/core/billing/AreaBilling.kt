@@ -201,7 +201,9 @@ internal class AreaBilling(context: Context) {
             return
         }
         val selection = BillingFlowParams.ProductDetailsParams.newBuilder()
-            .setProductDetails(product).setOfferToken(offer.offerToken).build()
+            .setProductDetails(product)
+            .apply { offer.offerToken?.takeIf { it.isNotBlank() }?.let { setOfferToken(it) } }
+            .build()
         val result = client.launchBillingFlow(activity, BillingFlowParams.newBuilder().setProductDetailsParamsList(listOf(selection)).build())
         when (result.responseCode) {
             BillingClient.BillingResponseCode.OK -> Unit
