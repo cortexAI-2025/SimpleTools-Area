@@ -1,0 +1,12 @@
+# Recette Samsung Galaxy A14 · Android 15
+
+1. Installer la 1.0 avec la même clé de signature que la 1.3. Créer une surface, une distance et une parcelle GPS. Installer la 1.3 par-dessus et vérifier les noms, points, notes et résultats historiques. Pour les APK signés avec des clés différentes, utiliser deux builds issus de la même machine ou la même piste Play.
+2. Refuser la localisation. Tester la carte, sélectionner surface, distance et périmètre, tracer, déplacer et supprimer des points, annuler et rétablir. Enregistrer, rouvrir, passer aux hectares, acres et pieds. Tester le partage texte et PDF, CSV, GeoJSON.
+3. Couper Wi-Fi et données mobiles après ouverture de la carte. Confirmer que les calculs et les mesures déjà enregistrées restent accessibles. Les tuiles absentes du cache nécessitent une connexion.
+4. Autoriser le GPS précis puis lancer explicitement une parcelle GPS en extérieur. Comparer le tracé avec les points réels, tester pause/reprise et écran verrouillé, et vérifier que la notification et l’écoute GPS disparaissent après l’arrêt. Vérifier le signal insuffisant dans une zone couverte ou en réduisant le seuil de précision.
+5. Sans achat, ouvrir PRO, vérifier que les projets et KML/GPX restent verrouillés et que FREE fonctionne. Depuis le canal Play de test, vérifier le prix local, l’annulation, le refus, le paiement différé accepté et refusé, puis l’achat confirmé et l’impossibilité de racheter.
+6. Avec PRO, créer deux projets et plusieurs parcelles. Assigner des catégories, ajouter un polygone entièrement inclus, rejeter un polygone chevauchant, vérifier surfaces nettes, cumul, clôture, comparaison, coefficient et parts indicatives. Dupliquer puis renommer. Sauvegarder, réimporter en copie et vérifier le rejet d’un JSON modifié avec coordonnées hors limites.
+7. Enregistrer un trajet GPS ouvert en marchant. Vérifier deux points valides minimum, la distance sans segment de fermeture et le GPX. Ouvrir KML dans un lecteur compatible et contrôler les exclusions.
+8. Activer le mode avion après validation de l’achat, redémarrer et vérifier l’accès local. Restaurer après effacement des données sur un profil de recette dédié, puis effectuer un remboursement avec révocation dans Play Console et contrôler le retour à FREE après restauration. Vérifier que les projets restent présents sur l’installation où la révocation est testée.
+
+Statut initial de la recette matérielle et Play Billing réel · à exécuter.

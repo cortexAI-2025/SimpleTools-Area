@@ -33,9 +33,14 @@ class MainActivity : AppCompatActivity() {
                     c.isAppearanceLightStatusBars = !dark
                     c.isAppearanceLightNavigationBars = !dark
                 }
-                AppNav()
+                AppNav(this@MainActivity)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (application as AreaApp).billing.refresh()
     }
 
     private fun applyLanguage(lang: AppLanguage) {

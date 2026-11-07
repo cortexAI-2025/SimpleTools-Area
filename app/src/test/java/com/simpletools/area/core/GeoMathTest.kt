@@ -80,7 +80,7 @@ class GeoMathTest {
         val r = GeoMath.validatePolygon(p) as PolygonResult.Valid
         assertTrue(rel(484932684.776, r.areaM2) < 1e-3)
         // le même polygone décalé loin de l'antiméridien donne la même surface (à la latitude près)
-        val shifted = p.map { GeoPoint(it.lat, it.lon - 170.0) }
+        val shifted = p.map { GeoPoint(it.lat, (it.lon + 370.0) % 360.0 - 180.0) }
         assertTrue(rel(r.areaM2, GeoMath.areaM2(shifted)) < 1e-9)
     }
 
@@ -90,7 +90,7 @@ class GeoMathTest {
         assertEquals(3000.0, GeoMath.perimeterM(sq, closed = false), 0.5)
     }
 
-    @Test fun vincentyReferenceDistance() {
+    @Test fun geodesicReferenceDistance() {
         val flinders = GeoPoint(-(37 + 57 / 60.0 + 3.72030 / 3600), 144 + 25 / 60.0 + 29.52440 / 3600)
         val buninyong = GeoPoint(-(37 + 39 / 60.0 + 10.15610 / 3600), 143 + 55 / 60.0 + 35.38390 / 3600)
         assertEquals(54972.271, GeoMath.distance(flinders, buninyong), 0.002)

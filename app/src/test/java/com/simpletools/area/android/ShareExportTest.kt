@@ -19,11 +19,11 @@ import java.util.Locale
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34])
 class ShareExportTest {
-    @Test fun shareHelperWritesAllThreeFormatsToCache() {
+    @Test fun shareHelperWritesAllFormatsToCache() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val p = TestData.parcel("Mon champ / test")
         for (f in ExportFormat.entries) {
-            val file = ShareHelper.export(ctx, p, f, Locale.FRANCE)
+            val file = ShareHelper.export(ctx, if (f == ExportFormat.GPX) p.copy(type = MeasureType.DISTANCE) else p, f, Locale.FRANCE)
             assertTrue("${f.name} ${file.length()}", file.exists() && file.length() > 0)
             assertEquals(f.extension, file.extension)
             if (f == ExportFormat.PDF) assertEquals("%PDF-", String(file.readBytes().copyOf(5), Charsets.ISO_8859_1))

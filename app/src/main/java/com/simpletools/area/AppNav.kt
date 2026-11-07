@@ -1,7 +1,10 @@
 package com.simpletools.area
 
+import android.app.Activity
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -15,6 +18,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.simpletools.area.core.location.GpsSession
 import com.simpletools.area.core.location.GpsTrackingService
+import com.simpletools.area.core.location.RecorderStatus
+import com.simpletools.area.feature.projects.ProScreen
+import com.simpletools.area.feature.projects.ProjectsScreen
 import com.simpletools.area.feature.calculator.CalculatorScreen
 import com.simpletools.area.feature.home.HomeScreen
 import com.simpletools.area.feature.library.LibraryScreen
@@ -32,20 +38,34 @@ import com.simpletools.area.feature.settings.SettingsViewModel
 private fun Context.app() = applicationContext as AreaApp
 
 @Composable
-fun AppNav() {
+fun AppNav(activity: Activity) {
     val nav = rememberNavController()
     val app = LocalContext.current.app()
     val ctx = LocalContext.current
+    val billing by app.billing.state.collectAsState()
+
+    fun navigateGps(openTrack: Boolean) {
+        val session = GpsSession.recorder.state.value
+        val currentTrack = if (session.status == RecorderStatus.IDLE) openTrack else session.openTrack
+        if (currentTrack && !app.billing.hasPro()) {
+            if (session.openTrack) {
+                GpsTrackingService.stop(ctx.applicationContext)
+                GpsSession.recorder.reset()
+            }
+            nav.navigate("pro")
+        } else nav.navigate("gps/$currentTrack")
+    }
 
     NavHost(nav, startDestination = "home") {
         composable("home") {
             HomeScreen(
                 onMap = { nav.navigate("measure/AREA/0") },
-                onGps = { nav.navigate("gps") },
+                onGps = { navigateGps(false) },
                 onCalculator = { nav.navigate("calculator") },
                 onDistance = { nav.navigate("measure/DISTANCE/0") },
                 onLibrary = { nav.navigate("library") },
                 onSettings = { nav.navigate("settings") },
+                onPro = { nav.navigate("pro") },
             )
         }
         composable(
@@ -63,13 +83,32 @@ fun AppNav() {
                 nav.navigate("detail/$id") { popUpTo("home") }
             })
         }
-        composable("gps") {
+        composable("pro") {
+            ProScreen(app.billing, activity, onBack = { nav.popBackStack() },
+                onProjects = { nav.navigate("projects") }, onTrack = { navigateGps(true) })
+        }
+        composable("projects") {
+            ProjectsScreen(app.projects, app.parcels, billing.active, onBack = { nav.popBackStack() })
+        }
+        composable("gps/{openTrack}", arguments = listOf(navArgument("openTrack") { type = NavType.BoolType })) { entry ->
+            val openTrack = entry.arguments?.getBoolean("openTrack") == true
+            if (openTrack && !billing.active) {
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    if (GpsSession.recorder.state.value.openTrack) {
+                        GpsTrackingService.stop(ctx.applicationContext)
+                        GpsSession.recorder.reset()
+                    }
+                    nav.popBackStack()
+                }
+                return@composable
+            }
             val vm: GpsMeasureViewModel = viewModel(factory = viewModelFactory {
                 initializer {
                     GpsMeasureViewModel(
                         GpsSession.recorder, app.parcels, app.settings, app.locationSource,
                         startService = { GpsTrackingService.start(ctx.applicationContext) },
                         stopService = { GpsTrackingService.stop(ctx.applicationContext) },
+                        openTrack = openTrack, hasPro = app.billing::hasPro,
                     )
                 }
             })
@@ -92,6 +131,7 @@ fun AppNav() {
                 onBack = { nav.popBackStack() },
                 onEditGeometry = { pid, distance -> nav.navigate("measure/${if (distance) "DISTANCE" else "AREA"}/$pid") },
                 onOpen = { nav.navigate("detail/$it") { popUpTo("library") } },
+                hasPro = app.billing::hasPro, onPro = { nav.navigate("pro") },
             )
         }
         composable("settings") {

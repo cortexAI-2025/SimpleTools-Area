@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -84,19 +85,23 @@ fun MapMeasureScreen(vm: MapMeasureViewModel, onBack: () -> Unit, onSaved: (Long
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showSave by rememberSaveable { mutableStateOf(false) }
-    val isArea = vm.mode == MeasureMode.AREA
+    val mode by vm.mode.collectAsState()
+    val isArea = mode != MeasureMode.DISTANCE
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
         if (res.values.any { it }) { vm.startLocation(); vm.recenterOnUser() }
         else scope.launch { snackbar.showSnackbar(context.getString(R.string.location_denied_manual_ok)) }
     }
     DisposableEffect(Unit) {
-        vm.startLocation()
         onDispose { vm.stopLocation() }
     }
 
     val satUrl = settings.satelliteTileUrl.takeIf { MapStyles.isValidTileTemplate(it) }
-    val title = stringResource(if (isArea) R.string.map_title else R.string.distance_title)
+    val title = stringResource(when (mode) {
+        MeasureMode.AREA -> R.string.map_title
+        MeasureMode.DISTANCE -> R.string.distance_title
+        MeasureMode.PERIMETER -> R.string.perimeter
+    })
     val messageNeedMore = stringResource(if (isArea) R.string.need_three_points else R.string.need_two_points)
 
     Scaffold(
@@ -105,6 +110,17 @@ fun MapMeasureScreen(vm: MapMeasureViewModel, onBack: () -> Unit, onSaved: (Long
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                MeasureMode.entries.forEach { candidate ->
+                    val label = when (candidate) {
+                        MeasureMode.AREA -> R.string.area
+                        MeasureMode.DISTANCE -> R.string.type_distance
+                        MeasureMode.PERIMETER -> R.string.perimeter
+                    }
+                    FilterChip(selected = candidate == mode, onClick = { vm.setMode(candidate) },
+                        label = { Text(stringResource(label), maxLines = 1) })
+                }
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 MeasureMap(
                     modifier = Modifier.fillMaxSize(),
@@ -146,7 +162,7 @@ fun MapMeasureScreen(vm: MapMeasureViewModel, onBack: () -> Unit, onSaved: (Long
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MetricsBlock(metrics, unit, vm::setUnit, messageNeedMore, locale)
+                    MetricsBlock(metrics, unit, vm::setUnit, messageNeedMore, locale, mode)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         ToolButton(Icons.Filled.Add, stringResource(R.string.add), true, Modifier.weight(1f)) { vm.addAtCenter() }
                         ToolButton(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo), canUndo, Modifier.weight(1f)) { vm.undo() }
@@ -219,10 +235,16 @@ private fun ToolButton(icon: ImageVector, label: String, enabled: Boolean, modif
 private fun MetricsBlock(
     m: Metrics, unit: com.simpletools.area.core.geometry.AreaUnitChoice,
     onUnit: (com.simpletools.area.core.geometry.AreaUnitChoice) -> Unit,
-    needMore: String, locale: java.util.Locale,
+    needMore: String, locale: java.util.Locale, mode: MeasureMode,
 ) {
     when (m) {
         is Metrics.Area -> {
+            if (mode == MeasureMode.PERIMETER) {
+                Text(UnitFormat.formatLength(m.perimeterM, UnitFormat.autoLengthUnit(m.perimeterM), locale),
+                    style = MaterialTheme.typography.headlineSmall)
+                Text(UnitFormat.formatLength(m.perimeterM, com.simpletools.area.core.geometry.LengthUnit.FOOT, locale))
+                return
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.area), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -240,6 +262,7 @@ private fun MetricsBlock(
         is Metrics.Length -> {
             Text(stringResource(R.string.total_distance), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(UnitFormat.formatLength(m.lengthM, UnitFormat.autoLengthUnit(m.lengthM), locale), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text(UnitFormat.formatLength(m.lengthM, com.simpletools.area.core.geometry.LengthUnit.FOOT, locale))
         }
         is Metrics.Invalid -> Text(polygonErrorText(m.error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         is Metrics.Incomplete, Metrics.Empty -> Text(needMore, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
